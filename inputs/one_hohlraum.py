@@ -5,15 +5,27 @@
 fformat = 'analytic_grid' # Type of grid to load.
 fname = '' # Can leave as empty string if using fformat='analytic_grid'
 
-NP = 3000000 # number of protons
+r_source = 0.0020 # Source size in cm
+source_loc = [0,0,-1] # Location of proton source
+prop_dir = [0,0,1] # Direction of propogation (cone of protons centered around this axis). Need not be normalized
+
+film_loc = [0,0,27] # Location of center of film
+film_axis1 = [-4.4,0,0] # Vector defining direction and extent of first film axis
+film_axis2 = [0,4.4,0] # Vector defining direction and extent of second film axis (perp. to first)
+
+NP = 1500000 # number of protons
 ntraces = 15 # number of protons for which to track trajectories
-nz_prot = 200 # number of proton z steps
-l_s2grid = 0.81 # distance from source to z=0 (beginning of grid)
-l_grid2film = 26.81 # distance from z=lz (end of grid) to film
-film_lx = 10.0 # width of film in cm
-film_ly = 10.0 # height of film in cm
-Elong = 14.7 # Initial proton energy in MeV
-r_source = 0.001 # Source radius in cm
+E0 = 14.7 # Initial proton energy in MeV
+
+l_s2start = 0.81 # distance from the source to start calculating proton deflections
+l_prop = 0.38 # distance after start (along prop_dir) through which to compute proton deflections
+nsteps = 200 # number of steps each proton takes along prop_dir
+spread_angle = 7.5 # angle (degrees) between prop_dir and outer edge of cone of protons
+
+hist_maxfluence = 200.0 # optional
+plot_quiver = False # optional, default False
+plot_fluence = True # optional, default True
+plot_traces = True # optional, default True
 
 #####################################
 # USER-DEFINED VARIABLES AND FIELDS #
@@ -24,11 +36,12 @@ If you are using fformat='analytic_grid', you need to define a function fields(x
 
 import numpy as np
 
-ngridx, ngridy, ngridz = 100, 100, 10 # REQUIRED FOR ANALYTIC GRID
+grid_nthreads = 4
 
-lz = 0.38 # length of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
-lx = 0.28 # width of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
-ly = 0.28 # height of simulation box in cm (REQUIRED FOR ANALYTIC GRID)   
+ngridx, ngridy, ngridz = 300, 300, 100 # REQUIRED FOR ANALYTIC GRID
+lx,ly,lz = 0.26,0.26,0.38 # REQUIRED FOR ANALYTIC GRID
+gridcorner = (-0.13,-0.13,-0.19) # REQUIRED FOR ANALYTIC GRID
+
 rLEH = 0.1200   # 100% LEH 2.4 mm diameter
 rHOL = 0.1230   # Outer radius of the hohlraum from PRL
 rCAP = 0.0250   # Capsule radius
@@ -38,8 +51,8 @@ lCAPEthickness = 0.0040  # Thickness of capsule E-field
 dCAPEthickness = 0.0020  # Distance of E-field from the capsule radius
 
 # Secondary quantities
-zCAPleft = 0.5*lz - rCAP
-zCAPright = 0.5*lz + rCAP
+zCAPleft = gridcorner[2] + 0.5*lz - rCAP
+zCAPright = gridcorner[2] + 0.5*lz + rCAP
 rCAPEinner = rCAP + dCAPEthickness
 rCAPEouter = rCAPEinner + lCAPEthickness
 rLEH2 = rLEH*rLEH
@@ -55,17 +68,21 @@ q = 4.8032e-10          #statcoul
 m = 1836.2*9.1094e-28   # g
 c = 3.0e10              # cm/sec
 
+#particle_charge = q # optional
+particle_mass = m # optional
+
 periodicity = 5
 
 def fields(coord):
     x,y,z = coord
-    return (Ex(x,y,z), Ey(x,y,z), Ez(x,y,z), Bx(x,y,z), By(x,y,z), Bz(x,y,z), nu(x,y,z),0.0,0.0)
+    # return (Ex(x,y,z), Ey(x,y,z), Ez(x,y,z), Bx(x,y,z), By(x,y,z), Bz(x,y,z), nu(x,y,z),0.0,0.0)
+    return (Ex(x,y,z), Ey(x,y,z), Ez(x,y,z), 0.0, 0.0, 0.0, 0.0,0.0,0.0)
 
 def Bx(x,y,z):
     r2 = x**2 + y**2
     Bx = 0.0
     if ( r_AMBEFinner2 < r2 < r_AMBEFouter2 ):
-        if (0.0 <= z <= lz):
+        if (gridcorner[2] <= z <= gridcorner[2]+lz):
             theta = np.arctan2(y, x)
             Bx_in_V_per_m = -0.0*8.0e4*np.sin(periodicity*theta)/c  # V/m
             Bx = Bx_in_V_per_m
@@ -79,7 +96,7 @@ def By(x,y,z):
     r2 = x**2 + y**2
     By = 0.0
     if ( r_AMBEFinner2 < r2 < r_AMBEFouter2 ):
-        if (0.0 <= z <= lz):
+        if (gridcorner[2] <= z <= gridcorner[2]+lz):
             theta = np.arctan2(y, x)
             By_in_V_per_m = 0.0*8.0e4*np.cos(periodicity*theta)/c  # V/m
             By = By_in_V_per_m
@@ -129,7 +146,7 @@ def Ey(x,y,z):
         if (zCAPleft < z < zCAPright):
             theta = np.arctan2(y, x)
             Ey_in_V_per_m = 5.6e8*np.sin(theta)  # V/m
-            Ey = Ey_in_V_per_m*(1.0e-4)*0.3333 
+            Ey = Ey_in_V_per_m*(1.0e-4)*0.3333
     return Ey
 
 def Ez(x,y,z):

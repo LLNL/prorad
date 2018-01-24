@@ -40,6 +40,10 @@ import numpy as np
 import scipy as sp
 import scipy.linalg as linalg
 from scipy import interpolate
+import matplotlib as mpl
+import os
+if not os.environ.has_key('DISPLAY'):
+    mpl.use('Agg')
 import matplotlib.pyplot as plt
 import itertools
 import sys
@@ -49,13 +53,12 @@ from timeit import default_timer as timer
 sys.dont_write_bytecode = True
 
 # Physical constants in cgs
-q = 4.8032e-10          # statcoul
-q_SI = 1.6022e-19       # coulombs
-m = 1836.2*9.1094e-28   # g
-qm = q/m                
+proton_charge = 4.8032e-10          # statcoul
+charge_SI = 1.6022e-19       # coulombs
+proton_mass = 1836.2*9.1094e-28   # g
 c = 2.9979e10           # cm/sec
-qmc = qm/c
 E_SItoCGS = 1e6/c
+MeV_to_ergs = 1.602e-6
 
 # Number of field values stored at each grid point (Ex,Ey,Ez,Bx,By,Bz,nu,Z,N)
 NUM_FIELDS = 9
@@ -75,8 +78,24 @@ def main():
     # Push the protons through the grid to obtain final locations on film plane
     film_x,film_y,Ep,traces = push_protons(grid)
 
-    plot_results(grid, film_x, film_y, Ep, traces, plot_fluence=True, plot_traces=True, plot_quiver=False, save_images=True)
+    # Default plotting options
+    plot_fluence = True
+    plot_traces = True
+    plot_quiver = False
+    save_images = False
 
+    # Overwrite plotting options with any that are specified in the input file
+    try: plot_fluence = params.plot_fluence
+    except AttributeError: pass
+    try: plot_traces = params.plot_traces
+    except AttributeError: pass
+    try: plot_quiver = params.plot_quiver
+    except AttributeError: pass
+    try: save_images = params.save_images
+    except AttributeError: pass
+
+    plot_results(grid, film_x, film_y, Ep, traces, plot_fluence=plot_fluence, plot_traces=plot_traces, plot_quiver=plot_quiver, save_images=save_images)
+    
     # If the user has defined 'fileout', save final x and y proton positions to a file with that name in 'outputs' directory.
     try:
         save_results(film_x,film_y,params.fileout)
@@ -215,7 +234,7 @@ def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None):
         except AttributeError: pass
 
         gridvals = np.zeros((ngridx,ngridy,ngridz,NUM_FIELDS))
- 
+        
         try: 
             # If grid_nthreads is defined in input file, initialize the specified grid elements in parallel.
             # Using Python's multiprocessing library rather than mpi, so actual parallelism is currently limited 
@@ -321,8 +340,8 @@ def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None):
         epres = DJH.h2interp(H,stg,'p',X_2D,Z_2D)*1e11 # Pa
         #etemp = DJH.h2interp(H,stg,'tmat',X_2D,Z_2D)*1e-3 # eV
         np.seterr(divide='ignore',invalid='ignore') # Temporarily ignore errors because we could have divide by zeros
-        #Exz = (etemp/q)*np.nan_to_num(np.divide(np.gradient(epres,dR,dz),epres))
-        Exz = -np.nan_to_num(np.divide(np.gradient(epres,dR/100.0,dz/100.0),q_SI*edens))*E_SItoCGS
+        #Exz = (etemp/proton_charge)*np.nan_to_num(np.divide(np.gradient(epres,dR,dz),epres))
+        Exz = -np.nan_to_num(np.divide(np.gradient(epres,dR/100.0,dz/100.0),charge_SI*edens))*E_SItoCGS
         np.seterr(divide='warn',invalid='warn') # Restore to normal error behavior
 
         xz_vals[:,:,0], xz_vals[:,:,2] = Exz
@@ -461,6 +480,21 @@ def push_protons(grid):
     # and at the film. The 3 is for x,y,z coords of each proton.
     traces = np.zeros((ntraces, nsteps+3, 3))
 
+    mass = proton_mass
+    charge = proton_charge
+
+    try: 
+        mass = params.particle_mass
+        print('Using user-defined particle mass.')
+    except AttributeError:
+        pass
+
+    try: 
+        charge = params.particle_charge
+        print('Using user-defined particle charge.')
+    except AttributeError:
+        pass
+
     try:
         # The user can choose to supply their own initial x,y,z positions and velocities.
         # (can supply either all of these or none of them, but not just some)
@@ -484,7 +518,7 @@ def push_protons(grid):
         # Protons "start" at source (meaning velocities are set as if they did)
         traces[:,0,0:3] = params.source_loc
 
-        v0 = np.sqrt(2.0*params.E0/911.0)*c
+        v0 = np.sqrt(2.0*params.E0*MeV_to_ergs/mass)
 
         # 3D position of proton source
         source_loc = np.array(params.source_loc)
@@ -539,7 +573,7 @@ def push_protons(grid):
 
         end_time = timer()
         print("Time elapsed during proton initialization: " + str(end_time-start_time) + " s")
-   
+    
     # Proton step size
     ds_prot = params.l_prop/nsteps
 
@@ -547,7 +581,7 @@ def push_protons(grid):
 
     # Push protons using compiled module written in C
     start_time = timer()
-    _pmover.pmover(qm, ds_prot, grid.dx, grid.dy, grid.dz, grid.xoffset, grid.yoffset, grid.zoffset, NP, nsteps,\
+    _pmover.pmover(mass, charge, ds_prot, grid.dx, grid.dy, grid.dz, grid.xoffset, grid.yoffset, grid.zoffset, NP, nsteps,\
                        grid.nx, grid.ny, grid.nz, ntraces, grid.cyl_coords, x, y, z, vx, vy, vz, prop_dir, grid.vals, traces)
     
     traces[:,nsteps+1,0] = x[0:ntraces]
@@ -580,8 +614,9 @@ def push_protons(grid):
     
     end_time = timer()
     print("Time elapsed during final propogation and projection onto film plane: " + str(end_time-start_time) + " s")
-        
-    Ep = 0.5*911.0*(vx**2+vy**2+vz**2)/c**2
+    
+    # Report final energy in MeV
+    Ep = 0.5*mass*(vx**2+vy**2+vz**2)/MeV_to_ergs
     
     traces[:,nsteps+2,0] = x[0:ntraces]
     traces[:,nsteps+2,1] = y[0:ntraces]
@@ -595,7 +630,7 @@ def push_protons(grid):
     return film_x,film_y,Ep,traces
 
 
-def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=False,plot_traces=False,save_images=False):
+def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True,plot_traces=True,save_images=False):
     """
     Plot proton fluence, vector field slice, and/or 3D particle traces
 
@@ -651,7 +686,7 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
 
         # Mask to get rid of the zero vectors
         quiverMask = ((quiverU != 0.0) | (quiverV != 0.0))
-        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=3.0e6)
+        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=1.0e6)
         plt.xlabel("x")
         plt.ylabel("y")
 
@@ -665,11 +700,11 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
             fig = plt.figure(2,figsize=(8,8))
             ax = fig.gca(projection='3d')
             for i in range(params.ntraces):
-                #ax.plot(traces[i,0:params.nsteps+3,0],traces[i,0:params.nsteps+2,1],traces[i,0:params.nsteps+2,2])
+                #ax.plot(traces[i,0:params.nsteps+2,0],traces[i,0:params.nsteps+2,1],traces[i,0:params.nsteps+2,2])
                 ax.plot(traces[i,:,0],traces[i,:,1],traces[i,:,2])
 
             # Plot grid bounds using dotted lines
-            for s, e in itertools.combinations(np.array(list(itertools.product([-grid.lx/2,grid.lx/2], [-grid.ly/2,grid.ly/2], [0,grid.lz]))), 2):
+            for s, e in itertools.combinations(np.array(list(itertools.product([params.gridcorner[0],params.gridcorner[0]+grid.lx],[params.gridcorner[1],params.gridcorner[1]+grid.ly], [params.gridcorner[2],params.gridcorner[2]+grid.lz]))), 2):
                 if np.sum(np.abs(s-e)) in (grid.lx,grid.ly,grid.lz):
                     ax.plot3D(*zip(s, e), color='k', linestyle='--')
             
@@ -693,7 +728,7 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
         try:
             maxfluence = params.hist_maxfluence
         except AttributeError: pass
-        myhist = plt.hist2d(film_x,film_y, bins=300, cmap='gray', range=[[-xmax,xmax],[-ymax,ymax]], vmin=0.0, vmax=maxfluence)
+        myhist = plt.hist2d(film_x,film_y, bins=300, cmap='gray_r', range=[[-xmax,xmax],[-ymax,ymax]], vmin=0.0, vmax=maxfluence)
         cbar = plt.colorbar(format='%05.2f')
         try:
             # Include interactive draggable colorbar, if available
@@ -708,7 +743,7 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
             plt.savefig('outputs/'+sys.argv[1]+'_fluence.png', bbox_inches='tight')
 
     plt.show()
-    
+
 def save_results(x_arr, y_arr, fileout):
     """
     Save final proton positions to a csv output file

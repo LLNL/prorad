@@ -52,18 +52,18 @@ PyMODINIT_FUNC init_pmover(void) {
 	PyObject *m = Py_InitModule3("_pmover", module_methods, module_docstring);
 	if (m == NULL)
 		return;
-
+	
 	/* Load 'numpy' functionality */
 	import_array();
 }
 
 static PyObject *move_protons(PyObject *self, PyObject *args) {
-	double qm, ds, dx, dy, dz, gx, gy, gz;
+	double mass, charge, ds, dx, dy, dz, gx, gy, gz;
 	int NP, ns, ngridx, ngridy, ngridz, ntraces, cyl_coords;
 	PyObject *x_obj, *y_obj, *z_obj, *vx_obj, *vy_obj, *vz_obj, *prop_dir_obj, *gridvals_obj, *traces_obj;
 	
 	/* Parse the input tuple */
-	if (!PyArg_ParseTuple(args, "ddddddddiiiiiiiOOOOOOOOO", &qm, &ds, 
+	if (!PyArg_ParseTuple(args, "dddddddddiiiiiiiOOOOOOOOO", &mass, &charge, &ds, 
 					&dx, &dy, &dz, &gx, &gy, &gz,
 					&NP, &ns, &ngridx, &ngridy, &ngridz, &ntraces, &cyl_coords,
 					&x_obj, &y_obj, &z_obj, 
@@ -112,7 +112,7 @@ static PyObject *move_protons(PyObject *self, PyObject *args) {
 	double grid_offset[] = {gx, gy, gz};
     
 	/* Call the external C function to move the protons. */
-	pmover(NP, ns, qm, ds, x, y, z, vx, vy, vz, prop_dir, ngridx, ngridy, ngridz, 
+	pmover(NP, ns, mass, charge, ds, x, y, z, vx, vy, vz, prop_dir, ngridx, ngridy, ngridz, 
             gridvals_flat, grid_offset, grid_spacing, ntraces, traces_flat, cyl_coords);
 
 
