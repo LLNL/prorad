@@ -212,6 +212,10 @@ def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None):
         
         print("Generating "+str(ngridx)+"x"+str(ngridy)+"x"+str(ngridz)+" grid from analytic fields...")
         
+        cyl_coords = False
+        try: cyl_coords = params.cyl_coords
+        except AttributeError: pass
+
         lx, ly, lz = params.lx, params.ly, params.lz
         xoffset, yoffset, zoffset = params.gridcorner
 
@@ -259,7 +263,7 @@ def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None):
 
         gridspacings = (lx/ngridx, ly/ngridy, lz/ngridz)
  
-        grid = Grid(gridvals, gridspacings, (xoffset,yoffset,zoffset), (lx,ly,lz))
+        grid = Grid(gridvals, gridspacings, (xoffset,yoffset,zoffset), (lx,ly,lz), cyl_coords=cyl_coords)
 
     elif fformat == "FLASH":
         print("Loading FLASH grid...")
@@ -630,7 +634,7 @@ def push_protons(grid):
     return film_x,film_y,Ep,traces
 
 
-def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True,plot_traces=True,save_images=False):
+def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=False,plot_traces=True,save_images=False):
     """
     Plot proton fluence, vector field slice, and/or 3D particle traces
 
@@ -662,10 +666,11 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True
 
     if plot_quiver:    
         # Plot material Z and field cross section
-        plt.figure(1)
+        plt.figure(1,figsize=(7,7))
         
         # Material Z
-        plt.imshow(grid.vals[:,:,grid.nz/2,7].T, origin='lower', cmap='Reds', interpolation='nearest') # plot material Z
+        if grid.cyl_coords is False:
+            plt.imshow(grid.vals[:,:,grid.nz/2,7].T, origin='lower', cmap='Reds', interpolation='nearest') # plot material Z
         
         # x-y electric fields
         quiverU = grid.vals[:,:,grid.nz/2,0].T
@@ -686,12 +691,12 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True
 
         # Mask to get rid of the zero vectors
         quiverMask = ((quiverU != 0.0) | (quiverV != 0.0))
-        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=1.0e6)
+        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=0.5e6)
         plt.xlabel("x")
         plt.ylabel("y")
 
         if save_images:
-            plt.savefig('outputs/'+sys.argv[1]+'_quiver.png', bbox_inches='tight')
+            plt.savefig('outputs/'+sys.argv[1]+'_quiver.png', bbox_inches='tight', transparent=True, dpi=200)
      
     if plot_traces:
         # Plot particle traces in 3D
@@ -704,9 +709,10 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True
                 ax.plot(traces[i,:,0],traces[i,:,1],traces[i,:,2])
 
             # Plot grid bounds using dotted lines
-            for s, e in itertools.combinations(np.array(list(itertools.product([params.gridcorner[0],params.gridcorner[0]+grid.lx],[params.gridcorner[1],params.gridcorner[1]+grid.ly], [params.gridcorner[2],params.gridcorner[2]+grid.lz]))), 2):
-                if np.sum(np.abs(s-e)) in (grid.lx,grid.ly,grid.lz):
-                    ax.plot3D(*zip(s, e), color='k', linestyle='--')
+            if grid.cyl_coords is False:
+                for s, e in itertools.combinations(np.array(list(itertools.product([params.gridcorner[0],params.gridcorner[0]+grid.lx],[params.gridcorner[1],params.gridcorner[1]+grid.ly], [params.gridcorner[2],params.gridcorner[2]+grid.lz]))), 2):
+                    if np.sum(np.abs(s-e)) in (grid.lx,grid.ly,grid.lz):
+                        ax.plot3D(*zip(s, e), color='k', linestyle='--')
             
             maxdim = max(grid.lx,grid.ly,grid.lz)
             ax.set_xlim([-maxdim/2,maxdim/2])
@@ -729,6 +735,10 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=True
             maxfluence = params.hist_maxfluence
         except AttributeError: pass
         myhist = plt.hist2d(film_x,film_y, bins=300, cmap='gray_r', range=[[-xmax,xmax],[-ymax,ymax]], vmin=0.0, vmax=maxfluence)
+        plt.xlabel('cm')
+        plt.ylabel('cm')
+        plt.title('fluence at detector')
+
         cbar = plt.colorbar(format='%05.2f')
         try:
             # Include interactive draggable colorbar, if available

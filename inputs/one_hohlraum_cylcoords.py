@@ -13,19 +13,20 @@ film_loc = [0,0,27] # Location of center of film
 film_axis1 = [-5,0,0] # Vector defining direction and extent of first film axis
 film_axis2 = [0,5,0] # Vector defining direction and extent of second film axis (perp. to first)
 
-NP = 1500000 # number of protons
+NP = 3000000 # number of protons
 ntraces = 15 # number of protons for which to track trajectories
 E0 = 14.7 # Initial proton energy in MeV
 
 l_s2start = 0.81 # distance from the source to start calculating proton deflections
 l_prop = 0.38 # distance after start (along prop_dir) through which to compute proton deflections
 nsteps = 200 # number of steps each proton takes along prop_dir
-spread_angle = 12 # angle (degrees) between prop_dir and outer edge of cone of protons
+spread_angle = 15 # angle (degrees) between prop_dir and outer edge of cone of protons
 
-hist_maxfluence = 200.0 # optional
-plot_quiver = False # optional, default False
+hist_maxfluence = 150.0 # optional
 plot_fluence = True # optional, default True
-plot_traces = True # optional, default True
+plot_traces = False # optional, default True
+plot_quiver = False # optional, default False
+save_images = False # optional, default False
 
 #####################################
 # USER-DEFINED VARIABLES AND FIELDS #
@@ -38,14 +39,16 @@ import numpy as np
 
 grid_nthreads = 4
 
-ngridx, ngridy, ngridz = 300, 300, 100 # REQUIRED FOR ANALYTIC GRID
-lx,ly,lz = 0.26,0.26,0.38 # REQUIRED FOR ANALYTIC GRID
-gridcorner = (-0.13,-0.13,-0.19) # REQUIRED FOR ANALYTIC GRID
+cyl_coords = True
+
+ngridx, ngridy, ngridz = 150, 300, 100 # REQUIRED FOR ANALYTIC GRID
+lx,ly,lz = 0.13,2*np.pi,0.38 # REQUIRED FOR ANALYTIC GRID
+gridcorner = (0, 0, -0.19) # REQUIRED FOR ANALYTIC GRID
 
 rLEH = 0.1200   # 100% LEH 2.4 mm diameter
 rHOL = 0.1230   # Outer radius of the hohlraum from PRL
 rCAP = 0.0250   # Capsule radius
-r_AMBEFouter = 0.1100   # Outer diamter of the ambipolar field
+r_AMBEFouter = 0.1100   # Outer diameter of the ambipolar field
 r_AMBEFinner = 0.1050   # Inner diameter of the ambipolar field
 lCAPEthickness = 0.0040  # Thickness of capsule E-field
 dCAPEthickness = 0.0020  # Distance of E-field from the capsule radius
@@ -55,13 +58,6 @@ zCAPleft = gridcorner[2] + 0.5*lz - rCAP
 zCAPright = gridcorner[2] + 0.5*lz + rCAP
 rCAPEinner = rCAP + dCAPEthickness
 rCAPEouter = rCAPEinner + lCAPEthickness
-rLEH2 = rLEH*rLEH
-rCAP2 = rCAP*rCAP
-rHOL2 = rHOL*rHOL
-r_AMBEFouter2 = r_AMBEFouter*r_AMBEFouter
-r_AMBEFinner2 = r_AMBEFinner*r_AMBEFinner
-rCAPEinner2 = rCAPEinner*rCAPEinner
-rCAPEouter2 = rCAPEouter*rCAPEouter
 
 # Physical constants in cgs
 q = 4.8032e-10          #statcoul
@@ -74,96 +70,66 @@ particle_mass = m # optional
 periodicity = 5
 
 def fields(coord):
-    x,y,z = coord
-    # return (Ex(x,y,z), Ey(x,y,z), Ez(x,y,z), Bx(x,y,z), By(x,y,z), Bz(x,y,z), nu(x,y,z),0.0,0.0)
-    return (Ex(x,y,z), Ey(x,y,z), Ez(x,y,z), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    r,theta,z = coord
+    return (Ex(r,theta,z), Ey(r,theta,z), Ez(r,theta,z), Bx(r,theta,z), By(r,theta,z), Bz(r,theta,z), nu(r,theta,z), Z(r,theta,z), N(r,theta,z))
 
-def Bx(x,y,z):
-    r2 = x**2 + y**2
-    Bx = 0.0
-    if ( r_AMBEFinner2 < r2 < r_AMBEFouter2 ):
-        if (gridcorner[2] <= z <= gridcorner[2]+lz):
-            theta = np.arctan2(y, x)
-            Bx_in_V_per_m = -0.0*8.0e4*np.sin(periodicity*theta)/c  # V/m
-            Bx = Bx_in_V_per_m
-        elif (lz <= z <= lz + 0.05):
-            theta = np.arctan2(y, x)
-            Bx_in_V_per_m = 0.0*8.0e4*np.sin(periodicity*theta)/c  # V/m
-            Bx = Bx_in_V_per_m
-    return Bx
-
-def By(x,y,z):
-    r2 = x**2 + y**2
-    By = 0.0
-    if ( r_AMBEFinner2 < r2 < r_AMBEFouter2 ):
-        if (gridcorner[2] <= z <= gridcorner[2]+lz):
-            theta = np.arctan2(y, x)
-            By_in_V_per_m = 0.0*8.0e4*np.cos(periodicity*theta)/c  # V/m
-            By = By_in_V_per_m
-        elif (lz <= z <= lz + 0.05):
-            theta = np.arctan2(y, x)
-            By_in_V_per_m = -0.0*8.0e4*np.cos(periodicity*theta)/c  # V/m
-            By = By_in_V_per_m
-    return By
-
-def Bz(x,y,z):
-    r2 = x**2 + y**2
-    Bz = 0.0
-    if ( 0.1**2 < r2 < 0.12**2):
-        theta = np.arctan2(y, x)
-        Bz_in_V_per_m = 0.0/c  # V/m
-        Bz = Bz_in_V_per_m*(1.0e-4)*0.3333
-    return Bz
-
-def Ex(x,y,z):
-    r2 = x**2 + y**2
+def Ex(r,theta,z):
+    r2 = r*r
     Ex = 0.0
-    if ( r_AMBEFinner2 < r2 < r_AMBEFouter2 ):
-        theta = np.arctan2(y, x)
+    if ( r_AMBEFinner < r < r_AMBEFouter ):
         # First term is ambipolar (radial) and second term is grad Pe (theta)
         Ex_in_V_per_m = 7.9e8*(-np.cos(theta)*(2.0-np.cos(periodicity*theta)) \
                                -np.sin(theta)*np.sin(periodicity*theta))
 #        - 2.0*np.sin(periodicity*theta))
         Ex = Ex_in_V_per_m*(1.0e-4)*0.3333
-    if (rCAPEinner2 < r2 < rCAPEouter2):
+    if (rCAPEinner < r < rCAPEouter):
         if (zCAPleft < z < zCAPright):
-            theta = np.arctan2(y, x)
             Ex_in_V_per_m = 5.6e8*np.cos(theta)  # V/m
             Ex = Ex_in_V_per_m*(1.0e-4)*0.3333   
     return Ex
 
-def Ey(x,y,z):
-    r2 = x**2 + y**2
+def Ey(r,theta,z):
     Ey = 0.0
-    if (r_AMBEFinner2 < r2 <r_AMBEFouter2):
-        theta = np.arctan2(y, x)
+    if (r_AMBEFinner < r <r_AMBEFouter):
         # First term is ambipolar (radial) and second term is grad Pe (theta)
         Ey_in_V_per_m = 7.9e8*(-np.sin(theta)*(2.0-np.cos(periodicity*theta)) \
                                +np.cos(theta)*np.sin(periodicity*theta))
 #        - 2.0*np.sin(periodicity*theta))
         Ey = Ey_in_V_per_m*(1.0e-4)*0.3333
-    if (rCAPEinner2 < r2 < rCAPEouter2):
+    if (rCAPEinner < r < rCAPEouter):
         if (zCAPleft < z < zCAPright):
-            theta = np.arctan2(y, x)
             Ey_in_V_per_m = 5.6e8*np.sin(theta)  # V/m
             Ey = Ey_in_V_per_m*(1.0e-4)*0.3333
     return Ey
 
-def Ez(x,y,z):
-    r2 = x**2 + y**2
+def Ez(r,theta,z):
     Ez = 0.0
-    if (0.0144 < r2 < 0.0195):
-        theta = np.arctan2(y, x)
-        Ez_in_V_per_m = -0.0*1.0e10   # V/m
-        Ez = Ez_in_V_per_m*(1.0e-4)/3.0
     return Ez
 
-def nu(x,y,z):
-    r2 = x**2 + y**2
-    nu1 = 0
-    if (rLEH2 < r2 < rHOL2):
-        nu1 = 0.003
-    if (r2 < rCAP2):
-        if (zCAPleft < z < zCAPright):
-            nu1 = r2*0.003/rCAP2
-    return nu1
+def Bx(r,theta,z):
+    Bx = 0.0
+    return Bx
+
+def By(r,theta,z):
+    By = 0.0
+    return By
+
+def Bz(r,theta,z):
+    Bz = 0.0
+    return Bz
+
+def nu(r,theta,z):
+    nu = 0
+    return nu
+
+def Z(r,theta,z):
+    Z = 0
+    if rLEH < r < rHOL:
+        Z = 79.0
+    return Z
+
+def N(r,theta,z):
+    N = 0
+    if rLEH < r < rHOL:
+        N = 6.02401601e22
+    return N
