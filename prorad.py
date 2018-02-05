@@ -57,8 +57,10 @@ proton_charge = 4.8032e-10          # statcoul
 charge_SI = 1.6022e-19       # coulombs
 proton_mass = 1836.2*9.1094e-28   # g
 c = 2.9979e10           # cm/sec
+c_SI = c*1e-2
 E_SItoCGS = 1e6/c
 MeV_to_ergs = 1.602e-6
+MeV_to_Joules = 1.602e-13
 
 # Number of field values stored at each grid point (Ex,Ey,Ez,Bx,By,Bz,nu,Z,N)
 NUM_FIELDS = 9
@@ -94,8 +96,9 @@ def main():
     try: save_images = params.save_images
     except AttributeError: pass
 
-    plot_results(grid, film_x, film_y, Ep, traces, plot_fluence=plot_fluence, plot_traces=plot_traces, plot_quiver=plot_quiver, save_images=save_images)
-    
+    cbar, fluence_fig, traces_fig, quiver_fig = plot_results(grid, film_x, film_y, Ep, traces, plot_fluence=plot_fluence, plot_traces=plot_traces, plot_quiver=plot_quiver, save_images=save_images)
+    plt.show()
+
     # If the user has defined 'fileout', save final x and y proton positions to a file with that name in 'outputs' directory.
     try:
         save_results(film_x,film_y,params.fileout)
@@ -151,7 +154,7 @@ class Grid(object):
         self.nz = len(gridvals[0,0,:,0])
         self.lx, self.ly, self.lz = gridextent
         self.cyl_coords = cyl_coords
-        
+
 
 def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None): 
     """
@@ -437,17 +440,18 @@ def load_grid(fformat=None,fname=None,ngridx=None,ngridy=None,ngridz=None):
     else:
         print('"'+fformat+'"'+'is not a recognized file format. Aborting.')
         return None
-   
+
     end_time = timer()
     print("Time elapsed during grid generation: " + str(end_time-start_time) + " s")
 
     if grid.cyl_coords:
         print("Grid dR, dTheta, dz: " + str(grid.dx) + " cm, " + str(grid.dy) + " rad, " + str(grid.dz) + " cm")
         print("Grid nR, nTheta, nz: " + str(grid.nx) + ", " + str(grid.ny) + ", " + str(grid.nz))
+        print("Grid lR, lTheta, lz: " + str(grid.lx)+" cm, " + str(grid.ly) + " rad, " + str(grid.lz) + " cm")
     else:
         print("Grid dx, dy, dz: " + str(grid.dx) + " cm, " + str(grid.dy) + " cm, " + str(grid.dz) + " cm")
         print("Grid nx, ny, nz: " + str(grid.nx) + ", " + str(grid.ny) + ", " + str(grid.nz))
-    print("Grid lx, ly, lz: " + str(grid.lx)+" cm, " + str(grid.ly) + " cm, " + str(grid.lz) + " cm")
+        print("Grid lx, ly, lz: " + str(grid.lx)+" cm, " + str(grid.ly) + " cm, " + str(grid.lz) + " cm")
 
     return grid
 
@@ -575,6 +579,21 @@ def push_protons(grid):
             z += (2*np.random.random_sample(NP)-1)*r_source
         except AttributeError: pass
 
+        try:
+            # Add random noise to account for finite source. 
+            # NOTE: this means that protons might not necessarily align with
+            # the starting end ending planes on either side of the grid, so
+            # be careful if you have, for example, a very thin sheet of metal
+            # at one end of your grid, that your l_prop will still push them
+            # all through it.
+            source_fwhm = params.source_fwhm
+            source_variance = (source_fwhm/2.355)**2
+            gaussian_noise = np.random.multivariate_normal([0,0,0], np.eye(3)*source_variance, NP)
+            x += gaussian_noise[:,0]
+            y += gaussian_noise[:,1]
+            z += gaussian_noise[:,2]
+        except AttributeError: pass
+
         end_time = timer()
         print("Time elapsed during proton initialization: " + str(end_time-start_time) + " s")
     
@@ -664,9 +683,15 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
 
     """
 
+    quiver_fig = None
+    traces_fig = None
+    fluence_fig = None
+    cbar = None
+
     if plot_quiver:    
         # Plot material Z and field cross section
-        plt.figure(1,figsize=(7,7))
+        quiver_fig = plt.figure(1)
+        plt.axes().set_aspect('equal')
         
         # Material Z
         if grid.cyl_coords is False:
@@ -691,7 +716,7 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
 
         # Mask to get rid of the zero vectors
         quiverMask = ((quiverU != 0.0) | (quiverV != 0.0))
-        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=0.5e6)
+        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=0.5e6,color='r')
         plt.xlabel("x")
         plt.ylabel("y")
 
@@ -702,22 +727,49 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
         # Plot particle traces in 3D
         try:
             from mpl_toolkits.mplot3d import Axes3D
-            fig = plt.figure(2,figsize=(8,8))
-            ax = fig.gca(projection='3d')
+            traces_fig = plt.figure(2,figsize=(7,7))
+            ax = traces_fig.gca(projection='3d')
             for i in range(params.ntraces):
                 #ax.plot(traces[i,0:params.nsteps+2,0],traces[i,0:params.nsteps+2,1],traces[i,0:params.nsteps+2,2])
                 ax.plot(traces[i,:,0],traces[i,:,1],traces[i,:,2])
 
-            # Plot grid bounds using dotted lines
-            if grid.cyl_coords is False:
+            # Plot grid bounds.
+            # NOTE: DO NOT MISTAKE GRID BOUNDS FOR WHERE YOUR HOHLRAUM IS, ESPECIALLY IN CYLINDRICAL CASE
+            if grid.cyl_coords:
+                # Plot 3d transparent cylinder
+                import mpl_toolkits.mplot3d.art3d as art3d
+                from matplotlib.patches import Circle
+                radius = grid.lx
+
+                # Cylinder top and bottom
+                # cyl_bottom = Circle((0, 0), radius, color='k', alpha=0.2)
+                # cyl_top = Circle((0, 0), radius, color='k', alpha=0.2)
+                # ax.add_patch(cyl_bottom)
+                # ax.add_patch(cyl_top)
+                # art3d.pathpatch_2d_to_3d(cyl_top, z=grid.zoffset+grid.lz, zdir="z")
+                # art3d.pathpatch_2d_to_3d(cyl_bottom, z=grid.zoffset, zdir="z")
+
+                # Cylinder sides
+                X, Z = np.meshgrid(np.linspace(-radius, radius, 20), np.linspace(grid.zoffset, grid.zoffset+grid.lz, 20))
+                Y = np.sqrt(radius**2 - X**2) # Pythagorean theorem
+                ax.plot_surface(X, Y, Z, linewidth=1, color='k', alpha=0.2)
+                ax.plot_surface(X, -Y, Z, linewidth=1, color='k', alpha=0.2)
+            else:
+                # Plot edges of 3d box as dotted black lines
                 for s, e in itertools.combinations(np.array(list(itertools.product([params.gridcorner[0],params.gridcorner[0]+grid.lx],[params.gridcorner[1],params.gridcorner[1]+grid.ly], [params.gridcorner[2],params.gridcorner[2]+grid.lz]))), 2):
                     if np.sum(np.abs(s-e)) in (grid.lx,grid.ly,grid.lz):
                         ax.plot3D(*zip(s, e), color='k', linestyle='--')
             
-            maxdim = max(grid.lx,grid.ly,grid.lz)
-            ax.set_xlim([-maxdim/2,maxdim/2])
-            ax.set_ylim([-maxdim/2,maxdim/2])
-            ax.set_zlim([0,maxdim])
+            if grid.cyl_coords:
+                ax.set_xlim([grid.xoffset-grid.lx,grid.xoffset+grid.lx])
+                ax.set_ylim([grid.xoffset-grid.lx,grid.xoffset+grid.lx])
+                ax.set_zlim([grid.zoffset,grid.zoffset+grid.lz])
+            else:
+                ax.set_xlim([grid.xoffset,grid.xoffset+grid.lx])
+                ax.set_ylim([grid.yoffset,grid.yoffset+grid.ly])
+                ax.set_zlim([grid.zoffset,grid.zoffset+grid.lz])
+            
+
             ax.set_xlabel('x')
             ax.set_ylabel('y')
             ax.set_zlabel('z')
@@ -726,33 +778,33 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
             print("Unable to plot particle traces--module mpl_toolkits.mplot3d is not installed.")
 
     if plot_fluence:
-        plt.figure(3)
+        fluence_fig = plt.figure(3)
         plt.clf()
+        plt.axes().set_aspect('equal')
         xmax = linalg.norm(params.film_axis1)
         ymax = linalg.norm(params.film_axis2)
         maxfluence = 150.0
         try:
             maxfluence = params.hist_maxfluence
         except AttributeError: pass
-        myhist = plt.hist2d(film_x,film_y, bins=300, cmap='gray_r', range=[[-xmax,xmax],[-ymax,ymax]], vmin=0.0, vmax=maxfluence)
-        plt.xlabel('cm')
-        plt.ylabel('cm')
-        plt.title('fluence at detector')
+        myhist = plt.hist2d(film_x*10,film_y*10, bins=300, cmap='gray_r', range=[[-xmax*10,xmax*10],[-ymax*10,ymax*10]], vmin=0.0, vmax=maxfluence)
+        plt.xlabel('mm')
+        plt.ylabel('mm')
+        #plt.title('9.5 MeV deuteron')
 
         cbar = plt.colorbar(format='%05.2f')
         try:
             # Include interactive draggable colorbar, if available
-            from libraries import mynormalize
             from libraries import draggable_cbar
-            cbar.set_norm(mynormalize.MyNormalize(vmin=myhist[0].min(),vmax=myhist[0].max(), stretch='linear'))
             cbar = draggable_cbar.DraggableColorbar(cbar,myhist[3])
             cbar.connect()
-        except ImportError: pass
+        except ImportError: print("Could not import draggable_cbar")
 
         if save_images:
             plt.savefig('outputs/'+sys.argv[1]+'_fluence.png', bbox_inches='tight')
 
-    plt.show()
+    return cbar, fluence_fig, traces_fig, quiver_fig
+
 
 def save_results(x_arr, y_arr, fileout):
     """

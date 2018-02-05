@@ -5,7 +5,8 @@
 fformat = 'analytic_grid' # Type of grid to load.
 fname = '' # Can leave as empty string if using fformat='analytic_grid'
 
-r_source = 0.0020 # Source size in cm
+#r_source = 0.0020 # Source size in cm
+source_fwhm = 0.0040
 source_loc = [0,0,-1] # Location of proton source
 prop_dir = [0,0,1] # Direction of propogation (cone of protons centered around this axis). Need not be normalized
 
@@ -18,11 +19,11 @@ ntraces = 15 # number of protons for which to track trajectories
 E0 = 14.7 # Initial proton energy in MeV
 
 l_s2start = 0.81 # distance from the source to start calculating proton deflections
-l_prop = 0.38 # distance after start (along prop_dir) through which to compute proton deflections
+l_prop = 0.382 # distance after start (along prop_dir) through which to compute proton deflections
 nsteps = 200 # number of steps each proton takes along prop_dir
 spread_angle = 15 # angle (degrees) between prop_dir and outer edge of cone of protons
 
-hist_maxfluence = 150.0 # optional
+hist_maxfluence = 130.0 # optional
 plot_fluence = True # optional, default True
 plot_traces = False # optional, default True
 plot_quiver = False # optional, default False
@@ -41,8 +42,8 @@ grid_nthreads = 4
 
 cyl_coords = True
 
-ngridx, ngridy, ngridz = 150, 300, 100 # REQUIRED FOR ANALYTIC GRID
-lx,ly,lz = 0.13,2*np.pi,0.38 # REQUIRED FOR ANALYTIC GRID
+ngridx, ngridy, ngridz = 150, 450, 100 # REQUIRED FOR ANALYTIC GRID
+lx,ly,lz = 0.1230, 2*np.pi, 0.38 # REQUIRED FOR ANALYTIC GRID
 gridcorner = (0, 0, -0.19) # REQUIRED FOR ANALYTIC GRID
 
 rLEH = 0.1200   # 100% LEH 2.4 mm diameter
@@ -58,13 +59,15 @@ zCAPleft = gridcorner[2] + 0.5*lz - rCAP
 zCAPright = gridcorner[2] + 0.5*lz + rCAP
 rCAPEinner = rCAP + dCAPEthickness
 rCAPEouter = rCAPEinner + lCAPEthickness
+zAMBEFleft = gridcorner[2] + 0.0*lz
+zAMBEFright = gridcorner[2] + 1.0*lz
 
 # Physical constants in cgs
 q = 4.8032e-10          #statcoul
 m = 1836.2*9.1094e-28   # g
 c = 3.0e10              # cm/sec
 
-#particle_charge = q # optional
+# particle_charge = q # optional
 particle_mass = m # optional
 
 periodicity = 5
@@ -76,12 +79,13 @@ def fields(coord):
 def Ex(r,theta,z):
     r2 = r*r
     Ex = 0.0
-    if ( r_AMBEFinner < r < r_AMBEFouter ):
-        # First term is ambipolar (radial) and second term is grad Pe (theta)
-        Ex_in_V_per_m = 7.9e8*(-np.cos(theta)*(2.0-np.cos(periodicity*theta)) \
-                               -np.sin(theta)*np.sin(periodicity*theta))
-#        - 2.0*np.sin(periodicity*theta))
-        Ex = Ex_in_V_per_m*(1.0e-4)*0.3333
+    if (r_AMBEFinner < r < r_AMBEFouter):
+        if zAMBEFleft < z < zAMBEFright:
+            # First term is ambipolar (radial) and second term is grad Pe (theta)
+            Ex_in_V_per_m = 7.9e8*(-np.cos(theta)*(2.0-np.cos(periodicity*theta)) \
+                                   -np.sin(theta)*np.sin(periodicity*theta))
+    #        - 2.0*np.sin(periodicity*theta))
+            Ex = Ex_in_V_per_m*(1.0e-4)*0.3333
     if (rCAPEinner < r < rCAPEouter):
         if (zCAPleft < z < zCAPright):
             Ex_in_V_per_m = 5.6e8*np.cos(theta)  # V/m
@@ -90,12 +94,13 @@ def Ex(r,theta,z):
 
 def Ey(r,theta,z):
     Ey = 0.0
-    if (r_AMBEFinner < r <r_AMBEFouter):
-        # First term is ambipolar (radial) and second term is grad Pe (theta)
-        Ey_in_V_per_m = 7.9e8*(-np.sin(theta)*(2.0-np.cos(periodicity*theta)) \
-                               +np.cos(theta)*np.sin(periodicity*theta))
-#        - 2.0*np.sin(periodicity*theta))
-        Ey = Ey_in_V_per_m*(1.0e-4)*0.3333
+    if (r_AMBEFinner < r < r_AMBEFouter):
+        if zAMBEFleft < z < zAMBEFright:
+            # First term is ambipolar (radial) and second term is grad Pe (theta)
+            Ey_in_V_per_m = 7.9e8*(-np.sin(theta)*(2.0-np.cos(periodicity*theta)) \
+                                   +np.cos(theta)*np.sin(periodicity*theta))
+    #        - 2.0*np.sin(periodicity*theta))
+            Ey = Ey_in_V_per_m*(1.0e-4)*0.3333
     if (rCAPEinner < r < rCAPEouter):
         if (zCAPleft < z < zCAPright):
             Ey_in_V_per_m = 5.6e8*np.sin(theta)  # V/m

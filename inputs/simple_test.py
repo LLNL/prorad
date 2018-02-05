@@ -5,7 +5,7 @@
 fformat = 'analytic_grid' # Type of grid to load.
 fname = '' # Can leave as empty string if using fformat='analytic_grid'
 
-r_source = 0.0035 # Source radius in cm
+source_fwhm = 0.0
 source_loc = [0,0,-1] # Location of proton source
 prop_dir = [0,0,1] # Direction of propogation (cone of protons centered around this axis). Need not be normalized
 
@@ -22,6 +22,9 @@ l_prop = 1.0 # distance after start (along prop_dir) through which to compute pr
 nsteps = 100 # number of steps each proton takes along prop_dir
 spread_angle = 3 # angle (degrees) between prop_dir and outer edge of cone of protons
 
+m = 1836.2*9.1094e-28   # g
+particle_mass = 1*m # optional
+plot_traces = False
 
 #####################################
 # USER-DEFINED VARIABLES AND FIELDS #
@@ -32,5 +35,5 @@ lx,ly,lz = 1.0,1.0,1.0 # REQUIRED FOR ANALYTIC GRID
 gridcorner = (-0.5,-0.5,-0.5) # REQUIRED FOR ANALYTIC GRID
 
 def fields(coord): # REQUIRED FOR ANALYTIC GRID
-    #return (0.0,0.0,0.0,1e5,1e5,0.0,0.0,0.0,0.0)
-    return (3e4,3e4,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    return (0.0,0.0,0.0,1e5,1e5,0.0,0.0,0.0,0.0)
+    # return (3e4,3e4,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
