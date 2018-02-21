@@ -551,12 +551,13 @@ def push_protons(grid):
 
         # Then rotate to correct direction and add in actual source position
         rot_axis = np.cross([0,0,1],prop_dir)
-        if linalg.norm(rot_axis) != 0:
-            rot_axis /= linalg.norm(rot_axis)
-            rot_angle = np.arccos(np.dot([0,0,1],prop_dir))
-            # New favorite way to define a rotation matrix:
-            rot_matrix = linalg.expm3(np.cross(np.eye(3), rot_axis*rot_angle))
-            positions = np.dot(rot_matrix,positions)
+        if linalg.norm(rot_axis) == 0:
+            rot_axis = [0,1,0]
+        rot_axis /= linalg.norm(rot_axis)
+        rot_angle = np.arccos(np.dot([0,0,1],prop_dir))
+        # New favorite way to define a rotation matrix:
+        rot_matrix = linalg.expm(np.cross(np.eye(3), rot_axis*rot_angle))
+        positions = np.dot(rot_matrix,positions)
         positions += source_loc[:,np.newaxis]
         
         # Calculate velocity vector based on starting position
@@ -689,36 +690,48 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
     cbar = None
 
     if plot_quiver:    
+        # TODO: Clean up this section
+        
         # Plot material Z and field cross section
         quiver_fig = plt.figure(1)
         plt.axes().set_aspect('equal')
         
         # Material Z
-        if grid.cyl_coords is False:
-            plt.imshow(grid.vals[:,:,grid.nz/2,7].T, origin='lower', cmap='Reds', interpolation='nearest') # plot material Z
+        # if grid.cyl_coords is False:
+        #     plt.imshow(grid.vals[:,:,grid.nz/2,7].T, origin='lower', cmap='Reds', interpolation='nearest') # plot material Z
         
         # x-y electric fields
-        quiverU = grid.vals[:,:,grid.nz/2,0].T
-        quiverV = grid.vals[:,:,grid.nz/2,1].T
+        # quiverU = grid.vals[:,:,grid.nz/2,0]
+        # quiverV = grid.vals[:,:,grid.nz/2,1]
         # x-y magnetic fields
-        #quiverU = grid.vals[:,:,grid.nz/2,3].T
-        #quiverV = grid.vals[:,:,grid.nz/2,4].T
+        quiverU = grid.vals[:,:,grid.nz/3,3]
+        quiverV = grid.vals[:,:,grid.nz/3,4]
         quiverX = range(len(quiverU[:,0]))
         quiverY = range(len(quiverU[0,:]))
-        quiverX,quiverY = np.meshgrid(quiverX,quiverY)
+        quiverX,quiverY = np.meshgrid(quiverX, quiverY, indexing='ij')
 
         if grid.cyl_coords:
+            # X-Y view
             quiverR = np.linspace(grid.dx/2,grid.dx*grid.nx+grid.dx/2,grid.nx)
             quiverTheta = np.linspace(0.0,2*np.pi-grid.dy,grid.ny)
-            quiverR,quiverTheta = np.meshgrid(quiverR,quiverTheta)
+            quiverR,quiverTheta = np.meshgrid(quiverR,quiverTheta, indexing='ij')
             quiverX = quiverR*np.cos(quiverTheta)
             quiverY = quiverR*np.sin(quiverTheta)
 
+            # Z-X view (uncomment to activate)
+            # quiverX = np.linspace(grid.zoffset, grid.zoffset+grid.lz, grid.nz)
+            # quiverY = np.linspace(grid.dx/2,grid.dx*grid.nx+grid.dx/2,grid.nx)
+            # quiverX, quiverY = np.meshgrid(quiverX,quiverY, indexing='ij')
+            # quiverU = grid.vals[:,0,:,2]
+            # quiverV = grid.vals[:,0,:,0]
+
         # Mask to get rid of the zero vectors
         quiverMask = ((quiverU != 0.0) | (quiverV != 0.0))
-        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask],scale=0.5e6,color='r')
+        plt.quiver(quiverX[quiverMask], quiverY[quiverMask], quiverU[quiverMask], quiverV[quiverMask])
         plt.xlabel("x")
         plt.ylabel("y")
+        plt.xlim([min(quiverX.flatten()),max(quiverX.flatten())])
+        plt.ylim([min(quiverY.flatten()),max(quiverY.flatten())])
 
         if save_images:
             plt.savefig('outputs/'+sys.argv[1]+'_quiver.png', bbox_inches='tight', transparent=True, dpi=200)
@@ -798,7 +811,7 @@ def plot_results(grid,film_x,film_y,Ep,traces,plot_fluence=True,plot_quiver=Fals
             from libraries import draggable_cbar
             cbar = draggable_cbar.DraggableColorbar(cbar,myhist[3])
             cbar.connect()
-        except ImportError: print("Could not import draggable_cbar")
+        except ImportError: pass
 
         if save_images:
             plt.savefig('outputs/'+sys.argv[1]+'_fluence.png', bbox_inches='tight')
