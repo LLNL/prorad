@@ -51,18 +51,16 @@
 #define DENS_IDX 8
 #define NUM_FIELDS 9
 
-#define PROT_MASS 1.6726219e-24
-#define PROT_CHARGE 4.8032e-10
 #define C_LIGHT 2.99792458e10
 #define M_PI 3.14159265358979323846
 
 double randNorm(void);
 
-void scatter(double *vx, double *vy, double *vz, double Z, double N, double ds);
+void scatter(double *vx, double *vy, double *vz, double Z, double N, double ds, double mass, double charge);
 
-void pmover(int NP, int ns, double qm, double ds, double *x, double *y, double *z, 
+void pmover(int NP, int ns, double mass, double charge, double ds, double *x, double *y, double *z, 
 		    double *vx, double *vy, double *vz, double *prop_dir, int ngridx, int ngridy, int ngridz,
-	       	double *gridvals_flat, double *grid_offset, double *grid_spacing,
+	       	double *gridvals_flat, double *grid_offset, double *grid_spacing, 
 		    int ntraces, double *traces_flat, int cyl_coords);
 
 double* nn_interp(double x, double y, double z, int ngridx, int ngridy, int ngridz,

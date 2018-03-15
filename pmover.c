@@ -46,7 +46,7 @@
 static double zeros[NUM_FIELDS] = {0.0};
 
 double* nn_interp(double x, double y, double z, int ngridx, int ngridy, int ngridz,
-		  double gridvals[][ngridy][ngridz][NUM_FIELDS], double *grid_offset, double *grid_spacing, int cyl_coords) {
+          double gridvals[][ngridy][ngridz][NUM_FIELDS], double *grid_offset, double *grid_spacing, int cyl_coords) {
     
     if (cyl_coords) {
         // Cylindrical grid, need to interpolate accordingly
@@ -108,11 +108,11 @@ double randNorm(void) {
  *  ds: step size through the material in cm
  */
 
-void scatter(double *vx, double *vy, double *vz, double Z, double N, double ds) {
+void scatter(double *vx, double *vy, double *vz, double Z, double N, double ds, double mass, double charge) {
     double phi = 2*M_PI*(double)rand()/RAND_MAX; // Azimuthal angle (using Jackson's notation)
     double v = sqrt(pow(*vx,2)+pow(*vy,2)+pow(*vz,2));
-    double p = (1.0/sqrt(1-pow(v/(C_LIGHT),2))) * (PROT_MASS) * v;
-    double sqrtMeanSqAngle = 4*sqrt(M_PI*N*log(204*pow(Z,-1./3.))*ds)*Z*pow(PROT_CHARGE,2)/(p*v); // Eqn 13.66 from Jackson
+    double p = (1.0/sqrt(1-pow(v/(C_LIGHT),2))) * mass * v;
+    double sqrtMeanSqAngle = 4*sqrt(M_PI*N*log(204*pow(Z,-1./3.))*ds)*Z*pow(charge,2)/(p*v); // Eqn 13.66 from Jackson
     double theta = randNorm()*sqrtMeanSqAngle; // Polar (zenith) angle
     
     double sint = sin(theta);
@@ -188,46 +188,47 @@ void scatter(double *vx, double *vy, double *vz, double Z, double N, double ds) 
     
 }
 
-void pmover(int NP, int ns, double qm, double ds, double *x, double *y, double *z, 
-		    double *vx, double *vy, double *vz, double *prop_dir, int ngridx, int ngridy, int ngridz,
-	       	double *gridvals_flat, double *grid_offset, double *grid_spacing, 
-		    int ntraces, double *traces_flat, int cyl_coords) {
-	
+void pmover(int NP, int ns, double mass, double charge, double ds, double *x, double *y, double *z, 
+            double *vx, double *vy, double *vz, double *prop_dir, int ngridx, int ngridy, int ngridz,
+            double *gridvals_flat, double *grid_offset, double *grid_spacing, 
+            int ntraces, double *traces_flat, int cyl_coords) {
+    
     srand(time(NULL));
 
+    double qm = charge/mass;
 
-	double (*gridvals)[ngridy][ngridz][NUM_FIELDS] = (double (*)[ngridy][ngridz][NUM_FIELDS]) &gridvals_flat[0];
-	double (*traces)[ns+3][3] = (double (*)[ns+3][3]) &traces_flat[0];
+    double (*gridvals)[ngridy][ngridz][NUM_FIELDS] = (double (*)[ngridy][ngridz][NUM_FIELDS]) &gridvals_flat[0];
+    double (*traces)[ns+3][3] = (double (*)[ns+3][3]) &traces_flat[0];
     
     #pragma omp parallel for
     for (int n = 0; n < NP; n++) {
-		for (int step = 0; step < ns; step++) {
+        for (int step = 0; step < ns; step++) {
 
             if (n < ntraces) {
-				traces[n][step+1][0] = x[n];
-				traces[n][step+1][1] = y[n];
-				traces[n][step+1][2] = z[n];
-			}
+                traces[n][step+1][0] = x[n];
+                traces[n][step+1][1] = y[n];
+                traces[n][step+1][2] = z[n];
+            }
             
             // Velocity along propogation axis
             double vs = vx[n]*prop_dir[0] + vy[n]*prop_dir[1] + vz[n]*prop_dir[2];
             
-			x[n] += vx[n]*ds/vs;
-			y[n] += vy[n]*ds/vs;
-			z[n] += vz[n]*ds/vs;
+            x[n] += vx[n]*ds/vs;
+            y[n] += vy[n]*ds/vs;
+            z[n] += vz[n]*ds/vs;
 
-			double* fieldvals = nn_interp(x[n], y[n], z[n], ngridx, ngridy, ngridz, gridvals, grid_offset, grid_spacing, cyl_coords);
+            double* fieldvals = nn_interp(x[n], y[n], z[n], ngridx, ngridy, ngridz, gridvals, grid_offset, grid_spacing, cyl_coords);
             
             if (fieldvals[MATZ_IDX] > 0.0) {
-                scatter(&vx[n], &vy[n], &vz[n], fieldvals[MATZ_IDX], fieldvals[DENS_IDX], ds);
+                scatter(&vx[n], &vy[n], &vz[n], fieldvals[MATZ_IDX], fieldvals[DENS_IDX], ds, mass, charge);
             }
             
-			vx[n] += (qm*ds/vs) * (fieldvals[EX_IDX] + (vy[n]*fieldvals[BZ_IDX] - vz[n]*fieldvals[BY_IDX])/C_LIGHT);
-			vy[n] += (qm*ds/vs) * (fieldvals[EY_IDX] + (vz[n]*fieldvals[BX_IDX] - vx[n]*fieldvals[BZ_IDX])/C_LIGHT);
-			vz[n] += (qm*ds/vs) * (fieldvals[EZ_IDX] + (vx[n]*fieldvals[BY_IDX] - vy[n]*fieldvals[BX_IDX])/C_LIGHT);
+            vx[n] += (qm*ds/vs) * (fieldvals[EX_IDX] + (vy[n]*fieldvals[BZ_IDX] - vz[n]*fieldvals[BY_IDX])/C_LIGHT);
+            vy[n] += (qm*ds/vs) * (fieldvals[EY_IDX] + (vz[n]*fieldvals[BX_IDX] - vx[n]*fieldvals[BZ_IDX])/C_LIGHT);
+            vz[n] += (qm*ds/vs) * (fieldvals[EZ_IDX] + (vx[n]*fieldvals[BY_IDX] - vy[n]*fieldvals[BX_IDX])/C_LIGHT);
 
-		}
-	}
+        }
+    }
 }
 
 

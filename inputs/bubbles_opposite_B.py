@@ -5,23 +5,25 @@
 fformat = 'analytic_grid' # Type of grid to load.
 fname = '' # Can leave as empty string if using fformat='analytic_grid'
 
-r_source = 0.0035 # Source radius in cm
+source_fwhm = 0.0040 # Source radius in cm
 source_loc = [0.0,0.0,-1.0] # Location of proton source
 prop_dir = [0.0,0.0,1.0] # Direction of propogation (cone of protons centered around this axis). Need not be normalized
 
 film_loc = [0.0,0.0,27.0] # Location of center of film
-film_axis1 = [-6.5,0.0,0.0] # Vector defining direction and extent of first film axis
-film_axis2 = [0.0,6.5,0.0] # Vector defining direction and extent of second film axis (perp. to first)
+film_axis1 = [-4.0,0.0,0.0] # Vector defining direction and extent of first film axis
+film_axis2 = [0.0,4.0,0.0] # Vector defining direction and extent of second film axis (perp. to first)
 
 NP = 4000000 # number of protons
 ntraces = 15 # number of protons for which to track trajectories
-E0 = 15.0 # Initial proton energy in MeV
+E0 = 3.0 # Initial proton energy in MeV
 
 l_s2start = 1.0 # distance from the source to start calculating proton deflections
 l_prop = 0.1 # distance after start (along prop_dir) through which to compute proton deflections
 nsteps = 500 # number of steps each proton takes along prop_dir
-spread_angle = 13.0 # angle (degrees) between prop_dir and outer edge of cone of protons
+spread_angle = 15.0 # angle (degrees) between prop_dir and outer edge of cone of protons
 
+m = 1836.2*9.1094e-28   # g
+particle_mass = m # optional
 
 #####################################
 # USER-DEFINED VARIABLES AND FIELDS #
@@ -32,29 +34,29 @@ If you are using fformat='analytic_grid', you need to define a function fields(c
 
 import numpy as np
 
-ngridx, ngridy, ngridz = 100, 210, 50 # REQUIRED FOR ANALYTIC GRID
+ngridx, ngridy, ngridz = 200, 200, 100 # REQUIRED FOR ANALYTIC GRID
 
-lx = 0.2 # width of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
-ly = 0.42 # height of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
-lz = 0.1 # REQUIRED FOR ANALYTIC GRID
+lx = 0.3 # width of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
+ly = 0.3 # height of simulation box in cm (REQUIRED FOR ANALYTIC GRID)
+lz = l_prop # REQUIRED FOR ANALYTIC GRID
 
 gridcorner = (-lx/2.0,-ly/2.0,0.0) # REQUIRED FOR ANALYTIC GRID
 
-grid_nthreads = 36 # Number of parallel threads used to initialize the grid (default is 1)
+grid_nthreads = 4 # Number of parallel threads used to initialize the grid (default is 1)
 
 Bmag = 0.5e6 # Gauss
 #Emag = 1e-4*0.3333*8.0e8 # StatV/cm
 Emag = 0.0
 
-dR = 0.0050
-R_outer_1 = 0.1
+dR = 0.0010
+R_outer_1 = 0.07
 R_inner_1 = R_outer_1-dR
 
-R_outer_2 = 0.1
+R_outer_2 = 0.07
 R_inner_2 = R_outer_2-dR
 
-x0_1,y0_1 = 0.0,0.11
-x0_2,y0_2 = 0.0,-0.11
+x0_1,y0_1 = 0.0,0.07
+x0_2,y0_2 = 0.0,-0.07
 
 def fields(coord):
     x,y,z = coord
@@ -71,6 +73,8 @@ def fields(coord):
     Ex = 0.0
     Ey = 0.0
     Ez = 0.0
+    Z = 0.0
+    N = 0.0
 
     if R_inner_1 < r_1 < R_outer_1:
         theta = np.arctan2(y_1,x_1)
@@ -94,5 +98,9 @@ def fields(coord):
         Ey += ey
         Ez += ez
 
-    return (Ex,Ey,Ez,Bx,By,Bz,0.0,0.0,0.0)
+    if z < 0.003:
+        if (x % 0.01 < 0.003) or (y % 0.01 < 0.003):
+            Z = 79.0
+            N = 6.02401601e22
+    return (Ex,Ey,Ez,Bx,By,Bz,0.0,Z,N)
 
