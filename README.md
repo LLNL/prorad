@@ -2,20 +2,17 @@ PRORAD is a general-purpose proton radiography simulation tool developed at
 NIF/LLNL. It was written by summer intern Mason Black (mason_black@hotmail.com)
 and is maintained by Scott Wilks (wilks1@llnl.gov).
 
-==================
  LLNL-CODE-739358
 ==================
 
-====================
-   LICENSE INFO
-====================
+ LICENSE INFO
+==================
 Can be found in file https://github.com/LLNL/prorad/blob/master/LICENSE
 Additional information concerning the BSD License for this software can be found 
 in file: https://github.com/LLNL/prorad/blob/master/AdditionalBSDNotice
 
-========================
-    USAGE DISCLAIMER
-========================
+USAGE DISCLAIMER
+==================
 
 For purposes of speed, this code assumes that proton trajectories remain
 approximately paraxial. What this means for practical purposes is that the 
@@ -23,9 +20,8 @@ Larmor radius of your protons, at a given energy and field strength, should
 be significantly greater than the thickness of the region over which fields of 
 that strength are found. If it is not, then large errors may be introduced.
 
-===================
-    COMPILATION
-===================
+COMPILATION
+==================
 
 PRORAD is written primarily in Python 2 for ease of use, extensibility, and 
 availability of libraries for reading the outputs of MHD and Rad-Hydro codes. 
@@ -48,8 +44,7 @@ standalone script. In either case, the user needs to create an input file that
 defines the problem setup. The input file is itself written in Python, and must
 be saved in the 'inputs' directory. See existing input files for reference.
 
-======================
-    STANDALONE USE
+STANDALONE USE
 ======================
 
 To run as a standalone script, from the toplevel 'prorad' directory run:
@@ -60,8 +55,7 @@ where inputfile is the name of an input file within the 'inputs' directory,
 omitting the '.py'. This will load a grid, propogate protons through it, and 
 plot the resulting fluence at the film plane.
 
-=======================
-    INTERACTIVE USE
+INTERACTIVE USE
 =======================
 
 To run PRORAD interactively, first start up an interactive Python session from 
@@ -119,9 +113,8 @@ plane, run:
 
     prorad.plot_results(grid,x,y,Ep,traces)
 
-===================
-    INPUT FILES
-===================
+INPUT FILES
+============
 
 Input files live in the 'inputs' directory. Several are included for reference.
 The easiest thing to do when making a new problem setup is to copy an existing
